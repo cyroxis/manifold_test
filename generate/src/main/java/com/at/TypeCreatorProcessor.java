@@ -1,15 +1,25 @@
 package com.at;
 
+import manifold.api.gen.AbstractSrcClass;
+import manifold.api.gen.SrcClass;
+import manifold.api.gen.SrcMethod;
+
 import javax.annotation.processing.AbstractProcessor;
 import javax.annotation.processing.RoundEnvironment;
 import javax.lang.model.SourceVersion;
 import javax.lang.model.element.AnnotationMirror;
 import javax.lang.model.element.Element;
+import javax.lang.model.element.ElementKind;
+import javax.lang.model.element.Name;
 import javax.lang.model.element.TypeElement;
+import javax.lang.model.element.VariableElement;
 import javax.lang.model.type.TypeMirror;
+import javax.lang.model.util.ElementFilter;
 import javax.tools.Diagnostic.Kind;
 
+import java.lang.reflect.Modifier;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -38,19 +48,43 @@ public class TypeCreatorProcessor extends AbstractProcessor {
         for (TypeElement annotation : annotations) {
             print("Processing Annotation: %s", annotation);
             for (Element element : roundEnv.getElementsAnnotatedWith(annotation)) {
-                for (AnnotationMirror annotationMirror : element.getAnnotationMirrors()) {
-                    print("amirror: %s", annotationMirror);
-
-                    TypeMirror result = getAnnotationAttribute(element, annotationMirror, "value");
-                    print("value: %s[%s]", result, result.getClass());
-
+                if (element.getKind().equals(ElementKind.CLASS)) {
+                    createClass(roundEnv, (TypeElement) element);
+                } else {
+                    print("Unexpected element %s", element);
                 }
-                print("Processing Element: %s", element);
             }
         }
 
         return true;
     }
+
+    private void createClass(RoundEnvironment roundEnv, TypeElement sourceType) {
+        String name = sourceType.getQualifiedName().toString() + "Winner";
+        SrcClass srcClass = new SrcClass(name, SrcClass.Kind.Class);
+
+        for (Element enclosedElement : sourceType.getEnclosedElements()) {
+            if (enclosedElement.getKind().equals(ElementKind.FIELD)) {
+                VariableElement field = (VariableElement) enclosedElement;
+                if (isAnnotatedWith(field, MarkedField.class)) {
+                    print("ee %s", field.asType());
+                }
+            }
+        }
+
+    }
+
+    private boolean isAnnotatedWith(Element element, Class<?> annotation) {
+        for (AnnotationMirror annotationMirror : element.getAnnotationMirrors()) {
+            if (annotation.getCanonicalName().equals(annotation.getName())) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
 
     @SuppressWarnings("unchecked")
     private <T> T getAnnotationAttribute(Element element, AnnotationMirror annotationMirror, String name) {

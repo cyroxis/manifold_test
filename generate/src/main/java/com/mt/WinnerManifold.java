@@ -30,8 +30,7 @@ public class WinnerManifold extends TypeCreatorManifold {
     }
 
     @Override
-    public SrcClass generateClass(TypeCreatorModel model, CompilationUnitTree tree,
-            DiagnosticListener<JavaFileObject> errorHandler) {
+    public SrcClass generateClass(TypeCreatorModel model, CompilationUnitTree tree, DiagnosticListener<JavaFileObject> errorHandler) {
 
         SrcClass srcClass = new SrcClass(model.getFqn(), SrcClass.Kind.Class);
 
@@ -56,7 +55,10 @@ public class WinnerManifold extends TypeCreatorManifold {
 
             if (annotated) {
                 String name = node.getName().toString();
+                String type = node.getType().toString();
                 print("%s is annotated", node.getName());
+
+                print("type %s", node.getType());
 
                 srcClass.addMethod(new SrcMethod()
                         .modifiers(Modifier.PUBLIC)
