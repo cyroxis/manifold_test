@@ -1,6 +1,8 @@
 package com.mt;
 
-@Winner
+import com.at.TemplateWith;
+import com.mt.extensions.java.FooCreator;
+
 public class Runner {
 
     public static void main(String[] args) {
@@ -8,15 +10,11 @@ public class Runner {
     }
 
     private void run() {
-        this.print("START");
+        this.printExtension("START");
 
-        this.print("Bobby".foo());
-        this.print("Bobby".bar());
+//        this.printExtension("Bobby".foo());
+        new BarWinner().foo();
 
-        RunnerWinner mc = new RunnerWinner();
-//        FooWinner mc = new FooWinner();
-        this.print(mc.win());
-
-        this.print("END");
+        this.printExtension("END");
     }
 }

@@ -1,11 +1,12 @@
-package com.mt;
+package com.at;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
+@Target(ElementType.FIELD)
 @Retention(RetentionPolicy.CLASS)
-@Target(ElementType.TYPE)
-public @interface Winner {
+public @interface MarkedField {
+    int value();
 }
