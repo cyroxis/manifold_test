@@ -2,8 +2,9 @@ package com.mt;
 
 import manifold.api.gen.AbstractSrcClass.Kind;
 import manifold.api.gen.SrcClass;
+import manifold.api.gen.SrcMethod;
 
-import static com.mt.PrintUtil.print;
+import java.lang.reflect.Modifier;
 
 public class WinnerMaker implements TypeCreator {
 
@@ -15,7 +16,13 @@ public class WinnerMaker implements TypeCreator {
     @Override
     public SrcClass generateClass(String fqn, Class<?> source) {
         SrcClass srcClass = new SrcClass(fqn, Kind.Class);
-        print("WE DO IT");
+
+        srcClass.addMethod(new SrcMethod()
+                .modifiers(Modifier.PUBLIC)
+                .name("win")
+                .returns(String.class)
+                .body("return \"winning!!!\";"));
+
         return srcClass;
     }
 }

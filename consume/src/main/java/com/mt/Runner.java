@@ -9,8 +9,7 @@ public class Runner {
     private void run() {
         this.printExtension("START");
 
-//        this.printExtension("Bobby".foo());
-        new BarWinner().foo();
+        this.printExtension(new BarWinner().win());
 
         this.printExtension("END");
     }
