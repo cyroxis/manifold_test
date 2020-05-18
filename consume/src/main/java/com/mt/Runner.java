@@ -1,8 +1,5 @@
 package com.mt;
 
-import com.at.TemplateWith;
-import com.mt.extensions.java.FooCreator;
-
 public class Runner {
 
     public static void main(String[] args) {

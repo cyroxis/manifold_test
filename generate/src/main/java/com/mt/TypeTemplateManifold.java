@@ -1,25 +1,9 @@
 package com.mt;
 
-import com.at.TemplateWith;
-import com.github.javaparser.JavaParser;
-import com.github.javaparser.ParseResult;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.Node;
-import com.github.javaparser.ast.NodeList;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import com.github.javaparser.ast.body.TypeDeclaration;
-import com.github.javaparser.ast.expr.AnnotationExpr;
-import com.github.javaparser.ast.expr.Name;
-import com.github.javaparser.ast.validator.ProblemReporter;
-import com.github.javaparser.ast.validator.VisitorValidator;
-import com.github.javaparser.ast.visitor.VoidVisitor;
-import com.github.javaparser.ast.visitor.VoidVisitorWithDefaults;
-import com.github.javaparser.utils.SourceRoot;
 import manifold.api.fs.IFile;
-import manifold.api.gen.SrcClass;
 import manifold.api.host.IModule;
+import manifold.api.host.RefreshKind;
 import manifold.api.type.JavaTypeManifold;
-import manifold.api.util.ManClassUtil;
 import manifold.api.util.StreamUtil;
 
 import javax.tools.DiagnosticListener;
@@ -28,32 +12,30 @@ import javax.tools.JavaFileObject;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.mt.PrintUtil.print;
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static manifold.api.util.ManClassUtil.getShortClassName;
 
 public class TypeTemplateManifold extends JavaTypeManifold<TypeCreatorModel> {
 
     private static final Set<String> FILE_EXTENSIONS = new HashSet<>(Arrays.asList("java", "class"));
-    private final Map<String, String> sourceTypeFqnCache = new HashMap<>();
-    private InMemoryClassLoader inMemoryClassLoader;
-    private TemplateAnnotationParser annotationParser;
-
+    private final Map<String, List<TypeCreator>> typeCreatorCache = new HashMap<>();
+    private final Map<String, TypeCreator> typeCreatorLookup = new HashMap<>();
+    private InMemoryClassLoader classLoader;
 
     @Override
     public void init(IModule module) {
-        init(module, (fqn, files) -> new TypeCreatorModel(module.getHost(), fqn, sourceTypeFqnCache.get(fqn), files));
-        inMemoryClassLoader = new InMemoryClassLoader(module);
-        annotationParser = new TemplateAnnotationParser(module);
+        init(module, (fqn, files) -> new TypeCreatorModel(module.getHost(), fqn, typeCreatorLookup.get(fqn), files));
+        classLoader = new InMemoryClassLoader(module);
     }
 
     @Override
@@ -94,78 +76,69 @@ public class TypeTemplateManifold extends JavaTypeManifold<TypeCreatorModel> {
         return false;
     }
 
+
     @Override
     public String getTypeNameForFile(String fqn, IFile file) {
-        String generatedType = getGeneratedTypeName(fqn, file);
-        if (generatedType != null) {
-            sourceTypeFqnCache.put(generatedType, fqn);
-        }
-        return generatedType;
+        return namesFor(fqn, file)
+                .findFirst()
+                .orElse(null);
     }
 
-    public String getGeneratedTypeName(String fqn, IFile file) {
-        if ("java".equalsIgnoreCase(file.getExtension())) {
-            return getGeneratedTypeNameFromSource(fqn, file);
-        } else {
-            return getGeneratedTypeNameFromClass(fqn, file);
-        }
+    @Override
+    protected Set<String> getAdditionalTypes(String fqn, IFile file) {
+        return namesFor(fqn, file)
+                .skip(1)
+                .collect(Collectors.toSet());
     }
 
-    protected String getGeneratedTypeNameFromSource(String fqn, IFile file) {
-//        List<String> templateTypes = annotationParser.getTemplateTypes(fqn, file);
-//        print("templates: %s", templateTypes);
-        String source = file.openInputStream()
-                .bufferedReader()
-                .lines()
-                .collect(Collectors.joining(System.lineSeparator()));
-
-        JavaParser parser = new JavaParser();
-        ParseResult<CompilationUnit> result = parser.parse(source);
-        print("parced: %b", result);
-
-        getModule().getSourcePath();
-        if (result.isSuccessful()) {
-            CompilationUnit cu = result.getResult()
-                    .orElseThrow(IllegalStateException::new);
-
-            for (TypeDeclaration<?> type : cu.getTypes()) {
-                print("type: %s", type.getName());
-                for (AnnotationExpr annotation : type.getAnnotations()) {
-                    annotation.getMetaModel().getQualifiedClassName();
-                    print("annotation: %s", annotation.getName());
-                    print("annotation: %s", annotation.getChildNodes());
-                    if (annotation.getNameAsString().equals(TemplateWith.class.getSimpleName())) {
-
-                    }
-                }
-            }
-        }
-
-        return null;
+    private Stream<String> namesFor(String fqn, IFile file) {
+        return getTypeCreators(fqn, file).stream()
+                .map(typeCreator -> {
+                    String generatedFqn = typeCreator.generateTypeName(fqn);
+                    typeCreatorLookup.put(generatedFqn, typeCreator);
+                    return generatedFqn;
+                });
     }
 
+    private List<TypeCreator> getTypeCreators(String fqn, IFile file) {
+        if (typeCreatorCache.containsKey(fqn)) {
+            return typeCreatorCache.get(fqn);
+        }
 
-    protected String getGeneratedTypeNameFromClass(String fqn, IFile file) {
-        return null; //TODO implement
+        List<TypeCreator> typeCreators = new ArrayList<>();
+        // Add empty list to protect against recursive name lookups during next steps
+        typeCreatorCache.put(fqn, typeCreators);
+
+        Class<?> type = classLoader.loadClass(fqn);
+        for (TemplateWith templateWith : type.getAnnotationsByType(TemplateWith.class)) {
+            //TODO add error handling and logging
+            TypeCreator typeCreator = templateWith.value().newInstance();
+            typeCreators.add(typeCreator);
+        }
+
+        super.refreshedFile(file, null, RefreshKind.MODIFICATION);
+
+        return typeCreatorCache.get(fqn);
     }
 
     @Override
     protected String contribute(Location location, String topLevelFqn, boolean genStubs, String existing, TypeCreatorModel model,
             DiagnosticListener<JavaFileObject> errorHandler) {
-        return generateClass(model).render().toString();
+        print("generate");
+        return model.generateClass(classLoader).render().toString();
     }
 
-    protected SrcClass generateClass(TypeCreatorModel model) {
-        SrcClass srcClass = new SrcClass(model.getFqn(), SrcClass.Kind.Class);
-        //TODO yo
-        return srcClass;
+    @Override
+    public RefreshKind refreshedFile(IFile file, String[] types, RefreshKind kind) {
+        classLoader = new InMemoryClassLoader(getModule());
+        return super.refreshedFile(file, types, kind);
     }
 
     @Override
     public void clear() {
-        sourceTypeFqnCache.clear();
-        inMemoryClassLoader = null;
-        annotationParser = null;
+        typeCreatorCache.clear();
+        typeCreatorLookup.clear();
+        classLoader = null;
         super.clear();
     }
 }
